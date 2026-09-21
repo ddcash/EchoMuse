@@ -5782,6 +5782,7 @@ def _merge_device(row) -> dict:
         # device that never answers.
         "owwTriggerCapable": getattr(live, "oww_trigger_capable", False) if live else False,
         "audioMixCapable": getattr(live, "audio_mix_capable", False) if live else False,
+        "sendspinCapable": getattr(live, "sendspin_capable", False) if live else False,
         # Gates the AEC delay slider, which only means anything on the
         # software tap. Paired with aecRef because the capability says the
         # firmware KNOWS how to use a hardware reference and aecRef says

@@ -35,8 +35,8 @@ import (
 	"github.com/wilbowes/EchoMuse/internal/server"
 	"github.com/wilbowes/EchoMuse/internal/wakeword/shadow"
 	"github.com/wilbowes/EchoMuse/internal/wifi"
-	pkgbuttons "github.com/wilbowes/EchoMuse/pkg/buttons"
 	"github.com/wilbowes/EchoMuse/pkg/board"
+	pkgbuttons "github.com/wilbowes/EchoMuse/pkg/buttons"
 	"github.com/wilbowes/EchoMuse/pkg/led"
 )
 
@@ -372,6 +372,7 @@ func main() {
 		applyAecConfig(canceller, dataClient)
 		applyBleConfig(bleScanner)
 		applyShadowConfig(dataClient, controlClient, pcmSpeaker, s)
+		applySendspinConfig(deviceID, pcmSpeaker, s)
 	})
 
 	// Speaker flush — barge-in: cut buffered TTS the moment the controller
@@ -487,6 +488,7 @@ func main() {
 		// re-converging — measured on 2026-08-29 as cancellation dropping to
 		// -1.7dB after a change and taking 3-4s to recover, repeatedly.
 		canceller.SetPlaybackLevel(level)
+		notifySendspin()
 	})
 	// Seed it from where the device actually is, right now. The callback
 	// above only fires on a CHANGE, and the two things that would produce
