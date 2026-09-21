@@ -2147,6 +2147,7 @@ function Detail({ device, token, onClose, onApprove, isAdmin, globalConfig, onDe
                 shadowCapable={!device.connected || !!device.owwShadowCapable}
                 triggerCapable={!device.connected || !!device.owwTriggerCapable}
                 mixCapable={!device.connected || !!device.audioMixCapable}
+                sendspinCapable={!device.connected || !!device.sendspinCapable}
                 holdCapable={!device.connected || !!device.buttonHoldCapable}
                 hwEchoRef={device.connected && device.aecRef === 'hw'}
                 hwRefCapable={!device.connected || !!device.aecHwRefCapable}
@@ -8245,7 +8246,7 @@ const STAGE_MONO = "'DM Mono',monospace";
 // control sitting under a toggle that does not govern it would look fine and
 // be silently wrong.
 const CONFIG_SECTIONS = {
-  "playback": ["eqBands", "eqLoudness", "duckDb", "limiterEnabled", "limiterThreshold", "limiterRelease", "bassGuardEnabled", "bassGuardDb"],
+  "playback": ["eqBands", "eqLoudness", "duckDb", "limiterEnabled", "limiterThreshold", "limiterRelease", "bassGuardEnabled", "bassGuardDb", "sendspinEnabled", "sendspinStereoChannel"],
   "wakeword": ["owwModel", "owwThreshold", "owwSpeexNs", "bargeInEnabled", "bargeInThreshold", "wakeArbitrationMs", "owwOnDevice"],
   "microphones": ["adcMicpga", "adcDigitalGain", "micGainDb", "beamformingEnabled", "beamAngle", "aecEnabled", "aecDelayMs", "aecTailMs", "aecRefSource", "nsAsr", "saveUtterances"],
   "ring": ["ledScene", "ledListenColor", "ledThinkColor", "meterAttack", "meterDecay", "meterFloor", "meterGamma", "meterRef", "meterCurve"],
@@ -8371,7 +8372,7 @@ function onDeviceMode(config) {
 }
 
 function DeviceConfigForm({ config, onChange, disabled, sections, onScopeChange,
-                            shadowCapable = true, mixCapable = true,
+                            shadowCapable = true, mixCapable = true, sendspinCapable = true,
                             holdCapable = true, triggerCapable = true,
                             hwEchoRef = false, hwRefCapable = true,
                             emosFleet = true }) {
@@ -8623,6 +8624,27 @@ function DeviceConfigForm({ config, onChange, disabled, sections, onScopeChange,
                   : "needs firmware that mixes music and voice (v2.10.0+)"}
                 value={config.duckDb ?? -18} min={-40} max={0} step={1} unit="dB"
                 onChange={v => set('duckDb', v)}/>
+            </div>
+            {/* Sendspin: Music Assistant streams to the Dot directly and keeps it
+                in step with other players. Off by default; the device opens a
+                listening port and an mDNS record only when this is on. The
+                approval happens in Music Assistant, on the player. */}
+            <div style={{ ...inputStyle, marginTop: 8 }}>
+              <Toggle label="Sendspin (Music Assistant)" disabled={!sendspinCapable}
+                sub={sendspinCapable
+                  ? "lets Music Assistant stream to this Echo directly, in sync with other players"
+                  : "needs firmware with Sendspin support"}
+                value={config.sendspinEnabled ?? false}
+                onChange={v => set('sendspinEnabled', v)}/>
+              <Select label="Sendspin channel"
+                sub="for a stereo pair, set one Echo to left and the other to right"
+                value={String(config.sendspinStereoChannel ?? 'mono').toLowerCase()}
+                options={[
+                  { value: 'mono',  label: 'Both (mono)', disabled: !sendspinCapable },
+                  { value: 'left',  label: 'Left', disabled: !sendspinCapable },
+                  { value: 'right', label: 'Right', disabled: !sendspinCapable },
+                ]}
+                onChange={v => set('sendspinStereoChannel', v)}/>
             </div>
             {/* The startup-volume slider used to live here and was removed
                 (2026-07-25): volume is persisted device STATE, not a setting.

@@ -317,3 +317,30 @@ def test_the_controller_announces_its_own_features_and_the_device_reads_them():
         f"controller announces {announced - consumed} which the device never "
         f"looks for — the feature would never be used and nothing would say so"
     )
+
+
+def test_sendspin_is_a_capability_and_a_setting_and_off_by_default():
+    """
+    Sendspin opens a listening port and an mDNS record on the device, which
+    nothing else does, so three things have to hold together:
+
+      - the firmware announces "sendspin" (it CAN),
+      - the dashboard gates the toggle on that capability, so older firmware
+        shows it disabled instead of offering a setting it would ignore,
+      - the setting defaults OFF, so upgrading firmware never opens a port
+        nobody asked for.
+    """
+    assert "sendspin" in device_capabilities()
+    assert '"sendspin" in (self.capabilities' in CONTROLLER.read_text(), \
+        "em_controller must expose the sendspin capability as a property"
+    assert "sendspinCapable" in API.read_text(), \
+        "/api/devices must surface the sendspin capability"
+    jsx = (ROOT / "controller" / "static" / "dashboard.jsx").read_text()
+    assert "disabled={!sendspinCapable}" in jsx, \
+        "the dashboard must gate the Sendspin toggle on the capability"
+
+    import sys
+    sys.path.insert(0, str(ROOT / "controller"))
+    import em_db
+    assert em_db.DEFAULT_DEVICE_CONFIG["sendspinEnabled"] is False
+    assert em_db.DEFAULT_DEVICE_CONFIG["sendspinStereoChannel"] == "mono"

@@ -88,6 +88,19 @@ type PcmSpeaker struct {
 	duckTarget atomic.Int32
 	mixer      Mixer
 
+	// syncMusic is a third source for the music plane: a synchronised stream
+	// (Sendspin) that is PULLED once per period instead of pushed. It has to be
+	// pulled — the write loop is the only thing that knows when a period will
+	// reach the speaker, and the source needs that to place audio on the
+	// server's timeline within the millisecond or so a multi-room group needs.
+	// A push queue can only guess at its own depth.
+	//
+	// Loaded every period by the ALSA goroutine, set from the control plane,
+	// hence atomic. syncBuf and syncBytes are that goroutine's alone.
+	syncMusic atomic.Pointer[syncSource]
+	syncBuf   []int16
+	syncBytes []byte
+
 	// echoTap, when non-nil, receives every period pumped to ALSA — real
 	// audio and silence alike — so an AEC reference stream advances in
 	// lockstep with the playback clock. Fixed at construction (silenceLoop
@@ -121,6 +134,32 @@ func (p *PcmSpeaker) OnStreamStats(cb func(StreamStats)) {
 	p.statsMu.Lock()
 	p.statsCb = cb
 	p.statsMu.Unlock()
+}
+
+// syncSource is the pull side of a synchronised stream.
+type syncSource struct {
+	// pull fills dst with one period of mono S16 audio and returns how many
+	// leading samples carry audio (0 = nothing due). It is called on the ALSA
+	// goroutine, so it must not block.
+	pull func(dst []int16) int
+	// active reports whether the stream is playing, for IsPlayingMusic.
+	active func() bool
+}
+
+// SetSyncMusic installs (or, with nil, removes) the synchronised music source.
+//
+// Home Assistant's own music (0x04) wins the plane when both have audio, and
+// that is decided per period: the synchronised source is still pulled and its
+// audio discarded, so it stays on the server's timeline underneath and comes
+// back in sync when the other ends. Pausing it instead would resume late by
+// however long the interruption lasted, and a timer alarm — which rides the
+// music plane — would take the device out of its group every time it rang.
+func (p *PcmSpeaker) SetSyncMusic(pull func(dst []int16) int, active func() bool) {
+	if pull == nil {
+		p.syncMusic.Store(nil)
+		return
+	}
+	p.syncMusic.Store(&syncSource{pull: pull, active: active})
 }
 
 func NewPcmSpeaker(echoTap func([]byte), levelTap func(rms float64)) (*PcmSpeaker, error) {
@@ -366,6 +405,22 @@ func (p *PcmSpeaker) silenceLoop() {
 			p.report(p.music.drained(), "music")
 		}
 
+		// Synchronised music. Always pulled when installed, even if Home
+		// Assistant's music takes the plane this period, so it keeps advancing
+		// on its own timeline (see SetSyncMusic).
+		if src := p.syncMusic.Load(); src != nil {
+			if p.syncBuf == nil {
+				p.syncBuf = make([]int16, periodSize)
+			}
+			if n := src.pull(p.syncBuf); n > 0 && music == nil {
+				// Mix works in place on buffers the caller owns and keeps
+				// nothing, so the reused buffer can go straight in: no
+				// allocation on a path that runs every 43ms.
+				p.syncBytes = monoS16ToStereoBytes(p.syncBytes, p.syncBuf)
+				music = p.syncBytes
+			}
+		}
+
 		// The ring's level must be measured BEFORE mixing: Mix sums into the
 		// voice buffer in place, so afterwards there is no voice-only signal
 		// left to measure.
@@ -483,7 +538,15 @@ func (p *PcmSpeaker) SetDuck(db float64) {
 func (p *PcmSpeaker) IsStreaming() bool { return p.voice.isActive() }
 
 // IsPlayingMusic reports whether a music stream is mid-flight.
-func (p *PcmSpeaker) IsPlayingMusic() bool { return p.music.isActive() }
+func (p *PcmSpeaker) IsPlayingMusic() bool {
+	if p.music.isActive() {
+		return true
+	}
+	if src := p.syncMusic.Load(); src != nil && src.active != nil {
+		return src.active()
+	}
+	return false
+}
 
 // EndStream marks the in-flight voice stream complete (0x03). Always arrives
 // after every 0x02 period of that stream has been handed to PumpPeriod —
