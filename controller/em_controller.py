@@ -849,16 +849,6 @@ class Device:
         return "led_anim" in (self.capabilities or [])
 
     @property
-    def sendspin_capable(self) -> bool:
-        """
-        Whether this firmware can be a Sendspin player. Says the firmware CAN;
-        whether it is ON is the sendspinEnabled config key, which the device
-        consumes itself. Gates the dashboard toggle so older firmware shows it
-        disabled with a reason instead of a control that does nothing.
-        """
-        return "sendspin" in (self.capabilities or [])
-
-    @property
     def audio_mix_capable(self) -> bool:
         """
         Whether this firmware holds music on its own plane and mixes it with

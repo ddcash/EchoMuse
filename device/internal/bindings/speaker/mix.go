@@ -180,23 +180,3 @@ func mixInto(dst, src []byte) {
 		dst[i+1] = byte(uint16(s) >> 8)
 	}
 }
-
-// monoS16ToStereoBytes expands mono samples to the interleaved stereo S16LE
-// the ALSA device takes, L=R, into dst (grown if too small).
-//
-// The Sendspin source produces samples and the write path consumes bytes; this
-// is the seam between them. It lives here, untagged, so the byte order and the
-// L=R duplication are testable on the host like the rest of the mixing maths.
-func monoS16ToStereoBytes(dst []byte, src []int16) []byte {
-	need := len(src) * 4
-	if cap(dst) < need {
-		dst = make([]byte, need)
-	}
-	dst = dst[:need]
-	for i, s := range src {
-		lo, hi := byte(uint16(s)), byte(uint16(s)>>8)
-		dst[i*4+0], dst[i*4+1] = lo, hi // L
-		dst[i*4+2], dst[i*4+3] = lo, hi // R
-	}
-	return dst
-}

@@ -1,7 +1,6 @@
 package speaker
 
 import (
-	"bytes"
 	"math"
 	"testing"
 )
@@ -190,25 +189,5 @@ func TestBothChannelsAreScaled(t *testing.T) {
 	l, r := sampleAt(buf, 3, 0), sampleAt(buf, 3, 1)
 	if l != r {
 		t.Fatalf("channels diverged: L=%d R=%d", l, r)
-	}
-}
-
-func TestMonoS16ToStereoBytes(t *testing.T) {
-	got := monoS16ToStereoBytes(nil, []int16{0x0102, -2, 32767, -32768})
-	want := []byte{
-		0x02, 0x01, 0x02, 0x01, // 0x0102 -> L, R
-		0xFE, 0xFF, 0xFE, 0xFF, // -2
-		0xFF, 0x7F, 0xFF, 0x7F, // 32767
-		0x00, 0x80, 0x00, 0x80, // -32768
-	}
-	if !bytes.Equal(got, want) {
-		t.Fatalf("got % x\nwant % x", got, want)
-	}
-	// A reused buffer of the right size is reused, not reallocated: this runs
-	// once per 43ms period on the write path.
-	buf := make([]byte, 16)
-	out := monoS16ToStereoBytes(buf, []int16{1, 2, 3, 4})
-	if &out[0] != &buf[0] {
-		t.Fatal("a large enough buffer was not reused")
 	}
 }

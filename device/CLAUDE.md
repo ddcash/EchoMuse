@@ -167,7 +167,6 @@ The always-on wake stream (`mic_start` without `lock_mic`) is **ungated and AGC-
 | `internal/server/` | Local state machine: mute, volume, LED mode priority |
 | `internal/config/config.go` | Global runtime config; env var defaults, overridden by controller push |
 | `internal/bindings/` | Hardware drivers: mic PCM, speaker PCM, LED I2C, button evdev |
-| `internal/sendspin/` | Sendspin player client (Noise `KKpsk2`, time filter, FLAC/PCM decode, pull-based scheduler). Pure Go, host-testable. See "Sendspin" below |
 | `internal/wakeword/` | openWakeWord streaming feature pipeline (mel ring → 76-frame windows → embedding ring → classifier). Pure Go: inference sits behind the `Inferer` interface so the buffering is host-testable with no ONNX/cgo. Validated tensor-for-tensor against Python via a golden fixture (`testdata/`, regenerate with `gen_fixture.py`) |
 | `internal/wakeword/ort/` | The `Inferer` implementation: ONNX Runtime via cgo. The library is **dlopen'd at runtime, never linked** (only the MIT C header is vendored) so a device without it boots normally and falls back to controller-side wake word — verified by the ARM binary needing only libdl/liblog/libc with zero undefined `Ort*` symbols. `DefaultOptions` (1 thread, XNNPACK, `allow_spinning=0`) is the measured optimum: 37.7% of one core against 243% for ORT's defaults. Don't "fix" the thread count — more threads lowers latency and *raises* CPU, the wrong trade for duty-cycled work |
 | `internal/wakeword/shadow/` | On-device scoring that reports but never acts (see "On-device wake word"). `Push` must never block: inference runs on its own goroutine and drops frames when behind |
@@ -177,86 +176,6 @@ The always-on wake stream (`mic_start` without `lock_mic`) is **ungated and AGC-
 | `internal/wifi/` | Safe WiFi network change with auto-rollback (wifi_change/wifi_commit/wifi_scan control messages; pending-marker recovery at startup). Reload path is `svc wifi disable/enable` ONLY — see package comment for the hardware-proven constraints. **An SSID is 0–32 arbitrary BYTES and is handled as bytes** (`ssid.go`): decoded from wpa_cli's printf_encode, carried as `ssid_hex`, compared as bytes, and written quoted when wpa_supplicant's quoted form can hold it (it reads to the LAST `"`, so quotes and backslashes are literal) or as hex when not. Until 2026-09-19 every path refused `"` and `\`, trimmed spaces, and wrote escaped text back as a different network — and the emOS wizard put SSIDs into a shell command |
 | `internal/bluetooth/` | BLE proxy — raw HCI passive scan over `/dev/stpbt` (single-owner, so Android's Bluedroid is durably `pm disable`d first), parsed into adverts and forwarded to the controller. `emit.go` decides which of them are worth sending; see "The BLE proxy" below, and read it before changing the scan cadence or the filtering |
 | `pkg/led/`, `pkg/mic/`, `pkg/speaker/`, `pkg/buttons/` | Hardware abstractions (interfaces) |
-
-## Sendspin — synchronised music from Music Assistant
-
-The device can be a Sendspin **player**: Music Assistant streams to it
-directly, in step with other players, and the audio never crosses the
-controller. It is off by default (`sendspinEnabled`); turning it on opens a
-listening port and an mDNS record, which nothing else on the device does.
-
-**Where it sits.** `internal/sendspin/` is a pure-Go client (no cgo, so it is
-host-testable), and it is a *third source for the music plane*, not a third
-plane. The write loop in `pcm_speaker.go` pulls one period from it per
-`silenceLoop` iteration and hands the result to the same `Mixer.Mix` as
-everything else, so ducking under a voice turn works with no extra code.
-`SetSyncMusic` installs it. **Pull, not push**, and that is the design: only the
-ALSA write loop knows when a period becomes audible, and a ±1ms sync target
-cannot be met by a queue that has to guess its own depth.
-
-**Server-initiated only.** The device advertises `_sendspin._tcp` on port 8928
-(`/sendspin`) and Music Assistant dials it, per the spec's recommendation. The
-identity is a Curve25519 key at `/data/local/etc/echomuse/sendspin.key`, made
-once per device from `crypto/rand` — the public half is the `client_id`, and the
-spec forbids a shared default.
-
-**The wire is `aiosendspin` 9.1.1's, not the spec's main branch.** Music
-Assistant 2.10 runs 9.1.1, and it is one revision behind the spec text:
-`supported_commands` lives in `client/hello`, the state field is
-`static_delay_ms`, `supported_pair_methods` is a *list*, Noise message 1 carries
-`psk_id` without `psk_category`, and audio chunks have a 9-byte header with no
-`send_ahead`. A server that cannot parse `client/hello` drops the connection, and
-a 13-byte header read as 9 shifts every sample, so the dialect is a named switch
-(`WireV9` default, `WireNext` for the newer text — implemented but **untested
-against a server**, since none ships it yet). Revisit when Music Assistant
-bumps the library.
-
-**Security posture.** Noise `KKpsk2` with the published Sentinel PSK, which is
-*unpaired* access: confidentiality and replay protection, but no authentication
-of who is on the other end, exactly as the spec's "Unpaired Access" section
-says. Music Assistant only activates an unpaired client its operator has
-approved. The Pairing PSK flow is **not implemented**: `pairing_psk` is
-advertised (the spec wants at least one method) and a server that picks it gets
-`pair/abort method_not_supported`. That is the next thing to build if unpaired
-access is not acceptable on a network.
-
-**Format.** FLAC and PCM, 48 kHz, 16 bit; **no Opus** (libopus needs cgo the NDK
-build cannot link, and the spec lets a player offer FLAC or PCM alone). Mono is
-requested by ordering `supported_formats` mono-first, so the *server* downmixes.
-Every format the device might ever want is listed in `client/hello`, because a
-request that does not match one silently falls back on the server. The device
-holds ~5.46 s (`buffer_capacity` = 128 periods of mono PCM).
-
-**Scheduling** (`player.go`). Chunks are stamped in the server's clock; the time
-filter (`timefilter.go`, checked against the reference in
-`testdata/timefilter_golden.json`) maps that to local time. `Player.Pull`
-corrects with single-frame inserts and deletes spread across the period, capped
-at 0.5% of it (the spec's speed limit), with a one-shot snap past 5 ms. **The
-sync error is measured against what the clock filter predicts, not against
-wall-clock truth, and the constant that is not measured is
-`4 * period` in `manager.go`**: the latency from the write loop's call to the
-period being audible (ALSA ring depth). It is a derivation, not a measurement.
-If two devices are audibly offset, that number — or the per-player sync delay in
-Music Assistant, which is persisted at `sendspin.delay` — is where to look.
-
-**Volume** follows the spec's perceived-loudness curve, `amplitude =
-(v/100)^1.5`, which on this codec's 0.5 dB steps is `unity + 60*log10(v/100)`
-(`volume.go`). The Echo's mute button is a **microphone** mute, so no `mute`
-command is offered: silencing the wrong thing is worse than not offering it.
-
-**Home Assistant's music wins the plane, and Sendspin keeps running under it.**
-When both have audio in a period the `0x04` stream is played and the Sendspin
-period is discarded but still pulled, so it stays on the server's timeline and
-returns in sync. The design note on the 3.0.0 issue said the device should
-*leave* the group when Home Assistant music starts; that was not done because a
-timer alarm rides the same plane, and every alarm would have taken the device
-out of its group.
-
-**Testing without a Dot.** `tools/sendspin_probe` runs the client on a host with
-a fake speaker, and `tools/sendspin_probe/interop_server.py` drives a real
-`aiosendspin` server at it and streams a tone (see its README). That exercises
-the handshake, the time filter, FLAC and the scheduler end to end. It says
-nothing about ALSA, the DAC latency or a real WiFi link.
 
 ## On-device wake word (shadow mode)
 

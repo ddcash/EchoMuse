@@ -1077,14 +1077,9 @@ func capabilities() []string {
 	// "is it" split as oww_shadow against shadow.active, and for the same
 	// reason: proving ch8 is a loopback needs the speaker to have played,
 	// which has not happened at registration.
-	// "sendspin": this firmware can be a Sendspin player: Music Assistant
-	// streams to it directly and keeps it in sync with other players. Announced
-	// so the dashboard can show the toggle as unavailable on older firmware
-	// instead of offering a setting the device would silently ignore. It says
-	// the firmware CAN; whether it is ON is the sendspinEnabled config key.
 	caps := []string{"mic", "speaker", "leds", "led_anim", "buttons",
 		"oww_shadow", "oww_trigger", "button_hold", "audio_mix",
-		"aec_hw_ref", "sendspin"}
+		"aec_hw_ref"}
 	if als.Present() {
 		caps = append(caps, "ambient_light")
 	}

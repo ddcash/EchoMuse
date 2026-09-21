@@ -125,20 +125,6 @@ type Device struct {
 	// pointer typed so false is expressible over the wire. Default off.
 	BleProxyEnabled *bool
 
-	// SendspinEnabled turns the on-device Sendspin player on: the device
-	// advertises _sendspin._tcp and Music Assistant can stream to it directly,
-	// synchronised with other players. Pointer typed so false is expressible.
-	// Default off, because it opens a listening port and an mDNS record that
-	// no other feature does; an operator turns it on.
-	SendspinEnabled *bool
-
-	// SendspinStereoChannel is which channel of a stereo group this device
-	// plays: "mono" (default, both folded together), "left" or "right". Two
-	// Dots set to left and right are a stereo pair — the group stream is
-	// identical for both and already sample-aligned, so the pair needs no
-	// protocol support beyond each device choosing a channel.
-	SendspinStereoChannel string
-
 	// ListeningAnim carries the controller's current listening-ring
 	// animation spec, raw JSON in the led_anim shape, so the device can
 	// light it locally at its OWN wake crossing (#263) instead of waiting
@@ -196,9 +182,6 @@ func (d *Device) loadDefaults() {
 	d.AecRefSource = normaliseAecRef(envStr("EM_AEC_HW_REF", AecRefAuto))
 	bleProxyEnabled := envBool("BLE_PROXY_ENABLED", false)
 	d.BleProxyEnabled = &bleProxyEnabled
-	sendspinEnabled := envBool("SENDSPIN_ENABLED", false)
-	d.SendspinEnabled = &sendspinEnabled
-	d.SendspinStereoChannel = normaliseStereoChannel(envStr("SENDSPIN_STEREO_CHANNEL", StereoMono))
 }
 
 // Apply updates the config from a controller-pushed config message.
@@ -279,13 +262,6 @@ func (d *Device) Apply(msg ConfigMessage) {
 	if msg.BleProxyEnabled != nil {
 		d.BleProxyEnabled = msg.BleProxyEnabled
 	}
-	if msg.SendspinEnabled != nil {
-		v := *msg.SendspinEnabled
-		d.SendspinEnabled = &v
-	}
-	if msg.SendspinStereoChannel != "" {
-		d.SendspinStereoChannel = normaliseStereoChannel(msg.SendspinStereoChannel)
-	}
 	if msg.ListeningAnim != nil {
 		d.ListeningAnim = msg.ListeningAnim
 	}
@@ -321,10 +297,6 @@ func (d *Device) Snapshot() ConfigMessage {
 	if d.BleProxyEnabled != nil {
 		bleProxyEnabled = *d.BleProxyEnabled
 	}
-	sendspinEnabled := false
-	if d.SendspinEnabled != nil {
-		sendspinEnabled = *d.SendspinEnabled
-	}
 	return ConfigMessage{
 		VadThreshold:       d.VadThreshold,
 		VadSpeechMs:        d.VadSpeechMs,
@@ -346,8 +318,6 @@ func (d *Device) Snapshot() ConfigMessage {
 		AecTailMs:          d.AecTailMs,
 		AecRefSource:       d.AecRefSource,
 		BleProxyEnabled:    &bleProxyEnabled,
-		SendspinEnabled:       &sendspinEnabled,
-		SendspinStereoChannel: d.SendspinStereoChannel,
 		ListeningAnim:      d.ListeningAnim,
 	}
 }
@@ -408,9 +378,6 @@ type ConfigMessage struct {
 	AecTailMs          int      `json:"aecTailMs,omitempty"`
 	AecRefSource       string   `json:"aecRefSource,omitempty"`
 	BleProxyEnabled    *bool    `json:"bleProxyEnabled,omitempty"`
-	// SendspinEnabled is a pointer so false can be sent; see Device.
-	SendspinEnabled       *bool  `json:"sendspinEnabled,omitempty"`
-	SendspinStereoChannel string `json:"sendspinStereoChannel,omitempty"`
 
 	// ListeningAnim: raw led_anim spec for the listening ring (#263).
 	// Carried as raw JSON so this package does not depend on the
@@ -472,26 +439,6 @@ func normaliseOnDevice(v string) string {
 // normaliseAecRef keeps an unknown value on the DETECTING path rather than
 // pinning one. A typo that pinned "sw" would silently disable the hardware
 // reference on every device it reached, and read as the feature not working.
-// Stereo channel selections for Sendspin.
-const (
-	StereoMono  = "mono"
-	StereoLeft  = "left"
-	StereoRight = "right"
-)
-
-// normaliseStereoChannel maps anything unrecognised to mono, the choice that is
-// never wrong: it plays what the group plays, folded.
-func normaliseStereoChannel(v string) string {
-	switch strings.ToLower(strings.TrimSpace(v)) {
-	case StereoLeft:
-		return StereoLeft
-	case StereoRight:
-		return StereoRight
-	default:
-		return StereoMono
-	}
-}
-
 func normaliseAecRef(v string) string {
 	switch strings.ToLower(strings.TrimSpace(v)) {
 	case AecRefHW, "on", "true", "1":

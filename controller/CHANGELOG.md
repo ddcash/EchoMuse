@@ -1,15 +1,5 @@
 # Changelog
 
-## Unreleased
-
-**Sendspin on the device (firmware).** A Dot can be a Sendspin player: turn it on
-in its Playback settings and Music Assistant streams to it directly, in step with
-other players, with `Left`/`Right` for a stereo pair. Off by default. Needs the
-matching firmware; older firmware shows the toggle disabled. Uses the unpaired
-(Sentinel PSK) mode, so Music Assistant's operator approves the player and the
-link is encrypted but the peer is not authenticated. The Pairing PSK flow is not
-implemented yet.
-
 ## 2.24.1
 
 **Re-provision a device without losing it.** The wizard recognised a device the

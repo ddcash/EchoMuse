@@ -25,8 +25,7 @@ SECTIONS: dict[str, dict] = {
         "label": "Playback",
         "keys": ["eqBands", "eqLoudness", "duckDb",
                  "limiterEnabled", "limiterThreshold", "limiterRelease",
-                 "bassGuardEnabled", "bassGuardDb",
-                 "sendspinEnabled", "sendspinStereoChannel"],
+                 "bassGuardEnabled", "bassGuardDb"],
     },
     "wakeword": {
         "label": "Wake word",

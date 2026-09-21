@@ -106,10 +106,6 @@ The wizard offers two ways to run EchoMuse on the Dot:
 - **Music:** each Dot is a Home Assistant media player (media browser, Music
   Assistant, radio). Speaking over music lowers it under the answer rather
   than pausing it.
-- **Synchronised music (Sendspin):** turn it on in a Dot's Playback settings and
-  Music Assistant can stream to it directly, in sync with your other speakers,
-  including as one side of a stereo pair. Off by default. See
-  [Sendspin](device/CLAUDE.md#sendspin--synchronised-music-from-music-assistant).
 - **Timers and announcements** from Home Assistant.
 - **Custom wake words** you train yourself with [`oww_forge`](oww_forge/README.md)
   and install from the dashboard.

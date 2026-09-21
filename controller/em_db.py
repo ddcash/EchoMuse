@@ -168,18 +168,6 @@ DEFAULT_DEVICE_CONFIG = {
     # cannot perform. A taste parameter — it wants tuning by ear in a real
     # room, like the LED meter curve, not a firmware push per attempt.
     "duckDb": -18.0,
-    # sendspinEnabled: the device becomes a Sendspin player. It advertises
-    # _sendspin._tcp and Music Assistant streams to it directly, in sync with
-    # other players, without the audio crossing this controller. Default OFF:
-    # it is the only feature that opens a listening port on the device, and it
-    # needs firmware that announces the "sendspin" capability. Device-consumed
-    # only; the controller reads neither key.
-    "sendspinEnabled": False,
-    # sendspinStereoChannel: which channel of a stereo group this device
-    # plays, "mono" (folded), "left" or "right". Two Dots set to left and
-    # right are a stereo pair: the group stream is identical for both and
-    # already sample-aligned, so the pair needs nothing more.
-    "sendspinStereoChannel": "mono",
     "owwModel":         "hey_jarvis_v0.1",
     # Multi-device wake SUPPRESSION window (ms), not a wait. The first
     # device to detect answers immediately; any other device detecting

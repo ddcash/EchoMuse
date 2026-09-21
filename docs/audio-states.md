@@ -163,22 +163,6 @@ process.
 
 ---
 
-## 5b. Sendspin is a second producer for the music plane
-
-A Sendspin stream (Music Assistant, straight to the device) is another source
-for the SAME music plane, not a third plane: no new frame type, no new row in the
-ownership ladder. It differs from the controller's feed in one way that matters
-here — it is **pulled** by the ALSA write loop, once per period, with the time
-that period will be audible, because a synchronised stream has to be placed on
-someone else's timeline.
-
-When Home Assistant's own music (`0x04`) and a Sendspin stream both have audio in
-a period, Home Assistant's plays and the Sendspin period is discarded — but still
-pulled, so it stays in step underneath and returns in sync when the other ends.
-See `device/CLAUDE.md`, "Sendspin", for why the device does not leave the group.
-
----
-
 ## 6. Open questions
 
 - **Q1 — should music be allowed to start during a turn, on its own plane?**
